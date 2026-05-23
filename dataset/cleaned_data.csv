@@ -1,4 +1,4 @@
-,data,source_number,destination_name,is_carting,is_ftl,day_of_week,start_hour,is_day,is_night,is_cutoff,osrm_time,osrm_distance,actual_distance,actual_time,real_actual_time_factor
+,data,source_number,destination_number,is_carting,is_ftl,day_of_week,start_hour,is_day,is_night,is_cutoff,osrm_time,osrm_distance,actual_distance,actual_time,real_actual_time_factor
 0,training,0,1,1,0,3,3,0,1,0,44.0,54.2181,39.38604027413606,68.0,1.5454545454545454
 1,training,1,504,1,0,3,4,0,1,0,45.0,53.2334,43.59580172416874,102.0,2.2666666666666666
 2,training,2,57,0,1,6,6,0,1,0,95.0,129.3519,100.70842292819516,183.0,1.926315789473684
