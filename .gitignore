@@ -10,7 +10,7 @@ wheels/
 .venv
 
 # dataset
-dataset/raw_data.csv
+dataset/
 
 #model
 /final_model/
