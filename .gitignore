@@ -8,9 +8,3 @@ wheels/
 
 # Virtual environments
 .venv
-
-# dataset
-dataset/
-
-#model
-final_model/
