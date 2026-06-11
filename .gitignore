@@ -10,7 +10,7 @@ wheels/
 .venv
 
 # dataset
-dataset/
+./dataset
 
 #model
-/final_model/
+./final_model/
