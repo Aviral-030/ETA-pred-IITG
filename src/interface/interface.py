@@ -1,124 +1,33 @@
-import pandas as pd
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import CGConv
-import numpy as np
-import joblib
+'''
+JOTTING DOWN MY MIND
+-----------------------
 
-class DelhiveryGNN(nn.Module):
-    def __init__(self, num_nodes, embed_dim=16, num_edge_features=5):
-        super(DelhiveryGNN, self).__init__()
-        
-        self.node_emb = nn.Embedding(num_nodes, embed_dim)
-        
-        self.conv1 = CGConv(channels=embed_dim, dim=num_edge_features)
-        self.conv2 = CGConv(channels=embed_dim, dim=num_edge_features)
-        self.conv3 = CGConv(channels=embed_dim, dim=num_edge_features)
+we have train_data: its a csv file which stores data of paths joining two hubs.
+the format of saving data is like: 
+data,source_number,destination_number,is_carting,is_ftl,day_of_week,start_hour,is_day,is_night,is_cutoff,osrm_time,osrm_distance,actual_distance,actual_time,real_actual_time_factor
+training,0,1,1,0,3,3,0,1,0,44.0,54.2181,39.38604027413606,68.0,1.5454545454545454
+we can get source/destination name simply using source/destination number, so even if there is no name in this data, we can get the names using the source and destination number
 
-        predictor_input_size = (embed_dim * 2) + num_edge_features
-        self.predictor = nn.Sequential(
-            nn.Linear(predictor_input_size, 64), 
-            nn.ReLU(),
-            nn.Dropout(p=0.3),
-            nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Dropout(p=0.3),
-            nn.Linear(32, 1) 
-        )
+our graph model which is fully trained, takes the input as : "training,0,1,1,0,3,3,0,1,0,44.0,54.2181,39.38604027413606,68.0,1.5454545454545454" (same as the single row if train_data csv file)
+of these things, the model will only take: source_number, destination_number, is_carting, is_ftl, start_hour, osrm_time into consideration, and it predicts the delay factor, once we multiply
+that delay factor with osrm_time, we get our ETA.
 
-    def get_contextual_embeddings(self, edge_index, edge_attr):
-        num_nodes = self.node_emb.num_embeddings
-        node_ids = torch.arange(num_nodes, device=edge_index.device)
-        x = self.node_emb(node_ids)
-        
-        x = self.conv1(x, edge_index, edge_attr)
-        x = F.relu(x)
-        x = self.conv2(x, edge_index, edge_attr)
-        x = F.relu(x)
-        x = self.conv3(x, edge_index, edge_attr)
-        x = F.relu(x)
-        
-        return x
+how i want my interface.py to run:
+- it should be streamlit designed, where someone can choose source name and destination name
+i also have a csv file of all the source and destinations (they all are part of the same group, one hub can be source, and might also act as destination in some other travel)
+hub_name,hub_number,bottleneck_score,delay_ratio,delay_hours,sla_breach,sla_breach_contribution,betweenness_centrality,closeness_centrality,degree_centrality
+Anand_VUNagar_DC (Gujarat),0,0.054602,1.250607427976397,0.0338,0.0,0.001574582034652544,0.00041639974375400383,0.1004685003007058,0.0012812299807815502
+this is what my hub-features.csv file's heading and first column looks like
+so, if we have source name, we can get source number and vice versa easily!
 
-try:
-    print("Booting AI Model and loading assets...")
-    scaler = joblib.load('dataset/fitted_scaler.pkl')
-    node_mapping = joblib.load('dataset/node_mapping.pkl')
-    
-    model = DelhiveryGNN(num_nodes=len(node_mapping), embed_dim=16, num_edge_features=5)
-    model.load_state_dict(torch.load("final_model/delhivery_gnn_weights.pth"))
-    model.eval() 
-    
-    print("Reconstructing supply chain network...")
-    df = pd.read_csv("dataset/final_normalized_graph.csv")
-    
-    src = df['source_number'].map(node_mapping).values
-    dst = df['destination_number'].map(node_mapping).values
-    edge_index = torch.tensor([src, dst], dtype=torch.long)
-    
-    feature_cols = ['is_carting', 'is_ftl', 'start_hour', 'osrm_time', 'osrm_distance']
-    edge_attr = torch.tensor(df[feature_cols].values, dtype=torch.float32)
-    
-    with torch.no_grad():
-        global_context_embeddings = model.get_contextual_embeddings(edge_index, edge_attr)
-        
-    print("System Ready. Global embeddings precomputed.")
+- after user chooses these two things, they have option to choose the correct path from hub A to hub B. there are multiple ways to choose the path, so i want to apply diakstra to get
+the best route. even if hub A and hub B are connected via direct path, there could be option to go indirectly, so i want all paths to be explored.
+- if user defines the route type (ftl or carting) then only use that, but if he doesnt, then choose whatever has lower ETA (also, if i have to go from hub A to hub B via hub C, and hub A to hub B is better via ftl, and hub B to C is better via carting, then use both ftl and carting both one after one)
+- there should be a sidebar, which defines "blacklisted hubs" and if one of the hubs in the path of hub A to hub B is blacklisted, then the model cannot choose that path, and suggest next better path
 
-except FileNotFoundError as e:
-    print(f"CRITICAL ERROR: Missing asset file. {e}")
-    exit()
+steps to follow:
+1. first of all, i need to create a proper graph, and doing it in C++ seems better (doing DSA in c++ will definately help)
+2. the c++ graph and python runner.py model need to talk with each other continously, instead of edge weight values in normal c++ graph, it will talk to runner.py to get the ETA
+3. then ill apply diakstra into it, to get the best route via connection of surrounding hubs.
+'''
 
-def predict_from_string(data_string):
-    data_parts = data_string.split(',')
-    
-    try:
-        source_hub_raw = float(data_parts[1])
-        dest_hub_raw = float(data_parts[2])
-        is_carting = float(data_parts[3])
-        is_ftl = float(data_parts[4])
-        day_of_week = float(data_parts[5]) # Extracted, but deliberately ignored below
-        start_hour = float(data_parts[6])
-        raw_osrm_time = float(data_parts[10])
-        raw_osrm_distance = float(data_parts[11])
-        actual_time = float(data_parts[13]) 
-    except IndexError:
-        return "ERROR: String format is invalid or missing columns."
-
-    print(f"\n--- PREDICTING ETA: Hub {int(source_hub_raw)} -> Hub {int(dest_hub_raw)} ---")
-    
-    if source_hub_raw not in node_mapping or dest_hub_raw not in node_mapping:
-        print("ERROR: One of these hubs is brand new and wasn't in the training data!")
-        return None
-
-    src_idx = node_mapping[source_hub_raw]
-    dst_idx = node_mapping[dest_hub_raw]
-    
-    x_src = global_context_embeddings[src_idx].unsqueeze(0)
-    x_dst = global_context_embeddings[dst_idx].unsqueeze(0)
-    
-    dummy_input = np.array([[raw_osrm_time, raw_osrm_distance, 0.0, 0.0]])
-    scaled_values = scaler.transform(dummy_input)[0]
-    
-    edge_attr = torch.tensor([[is_carting, is_ftl, start_hour, scaled_values[0], scaled_values[1]]], dtype=torch.float32)
-    
-    with torch.no_grad():
-        regression_input = torch.cat([x_src, x_dst, edge_attr], dim=1)
-        predicted_factor = model.predictor(regression_input).item()
-        
-    predicted_factor = min(predicted_factor, 4.0)
-    true_eta = raw_osrm_time * predicted_factor
-    
-    print(f"OSRM Base Time:       {raw_osrm_time:.2f} hours")
-    print(f"AI Predicted Factor:  {predicted_factor:.2f}x")
-    print(f"FINAL AI ETA:         {true_eta:.2f} hours")
-    print(f"(Actual target time was {actual_time:.2f} hours)")
-    print("-" * 50)
-    
-    return true_eta
-
-if __name__ == "__main__":
-    while(1):
-        testing_str = input(">>>")
-        if(testing_str=="q"): break
-        predict_from_string(testing_str)
