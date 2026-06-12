@@ -69,21 +69,19 @@ except FileNotFoundError as e:
     print(f"CRITICAL ERROR: Missing asset file. {e}")
     exit()
 
-def predict_from_string(data_string):
-    data_parts = data_string.split(',')
+def predict_from_string(data):
+    # data_parts = data_string.split(',')
     
     try:
-        source_hub_raw = float(data_parts[1])
-        dest_hub_raw = float(data_parts[2])
-        is_carting = float(data_parts[3])
-        is_ftl = float(data_parts[4])
-        day_of_week = float(data_parts[5]) # Extracted, but deliberately ignored below
-        start_hour = float(data_parts[6])
-        raw_osrm_time = float(data_parts[10])
-        raw_osrm_distance = float(data_parts[11])
-        actual_time = float(data_parts[13]) 
-    except IndexError:
-        return "ERROR: String format is invalid or missing columns."
+        source_hub_raw = float(data['source_hub'])
+        dest_hub_raw = float(data['destination_hub'])
+        is_carting = float(data['is_carting'])
+        is_ftl = float(data['is_ftl'])
+        start_hour = float(data['start_hour'])
+        raw_osrm_time = float(data['osrm_time'])
+    except Exception as e:
+        print(e)
+        
 
     print(f"\n--- PREDICTING ETA: Hub {int(source_hub_raw)} -> Hub {int(dest_hub_raw)} ---")
     
@@ -97,7 +95,7 @@ def predict_from_string(data_string):
     x_src = global_context_embeddings[src_idx].unsqueeze(0)
     x_dst = global_context_embeddings[dst_idx].unsqueeze(0)
     
-    dummy_input = np.array([[raw_osrm_time, raw_osrm_distance, 0.0, 0.0]])
+    dummy_input = np.array([[raw_osrm_time, 0.0, 0.0]])
     scaled_values = scaler.transform(dummy_input)[0]
     
     edge_attr = torch.tensor([[is_carting, is_ftl, start_hour, scaled_values[0], scaled_values[1]]], dtype=torch.float32)
@@ -112,13 +110,13 @@ def predict_from_string(data_string):
     print(f"OSRM Base Time:       {raw_osrm_time:.2f} hours")
     print(f"AI Predicted Factor:  {predicted_factor:.2f}x")
     print(f"FINAL AI ETA:         {true_eta:.2f} hours")
-    print(f"(Actual target time was {actual_time:.2f} hours)")
     print("-" * 50)
     
     return true_eta
 
 if __name__ == "__main__":
-    while(1):
-        testing_str = input(">>>")
-        if(testing_str=="q"): break
-        predict_from_string(testing_str)
+    # while(1):
+    #     testing_str = input(">>>")
+    #     if(testing_str=="q"): break
+    #     predict_from_string(testing_str)
+    ...
