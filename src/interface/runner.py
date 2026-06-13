@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import CGConv
 import numpy as np
 import joblib
+import os
 
 class DelhiveryGNN(nn.Module):
     def __init__(self, num_nodes, embed_dim=16, num_edge_features=5):
@@ -43,15 +44,22 @@ class DelhiveryGNN(nn.Module):
 
 try:
     print("Booting AI Model and loading assets...")
-    scaler = joblib.load('dataset/fitted_scaler.pkl')
-    node_mapping = joblib.load('dataset/node_mapping.pkl')
-    
+    current_dir = os.path.dirname(os.path.abspath(__file__))    
+    project_root = os.path.abspath(os.path.join(current_dir, "../.."))
+
+    fitted_scale_path = os.path.join(project_root, 'dataset', 'fitted_scaler.pkl')
+    node_mapping_path = os.path.join(project_root, 'dataset', 'node_mapping.pkl')
+    final_model_weights_path = os.path.join(project_root, 'final_model', 'delhivery_gnn_weights.pth')
+
+    scaler = joblib.load(fitted_scale_path)
+    node_mapping = joblib.load(node_mapping_path)
+
     model = DelhiveryGNN(num_nodes=len(node_mapping), embed_dim=16, num_edge_features=5)
-    model.load_state_dict(torch.load("final_model/delhivery_gnn_weights.pth"))
+    model.load_state_dict(torch.load(final_model_weights_path))
     model.eval() 
     
     print("Reconstructing supply chain network...")
-    df = pd.read_csv("dataset/final_normalized_graph.csv")
+    df = pd.read_csv(os.path.join(project_root, 'dataset', 'final_normalized_graph.csv'))
     
     src = df['source_number'].map(node_mapping).values
     dst = df['destination_number'].map(node_mapping).values
@@ -69,33 +77,51 @@ except FileNotFoundError as e:
     print(f"CRITICAL ERROR: Missing asset file. {e}")
     exit()
 
-def predict_from_string(data):
-    # data_parts = data_string.split(',')
-    
+
+def predict_eta(data):
+    """
+    Takes a dictionary payload from the RoutingEngine and returns the ETA in hours.
+    """
     try:
-        source_hub_raw = float(data['source_hub'])
-        dest_hub_raw = float(data['destination_hub'])
+        # 1. Safely extract, checking for both naming conventions just in case
+        source_hub_raw = data['source_hub']
+        dest_hub_raw = data.get('destination_hub', data.get('dest_hub'))
+        
         is_carting = float(data['is_carting'])
         is_ftl = float(data['is_ftl'])
         start_hour = float(data['start_hour'])
         raw_osrm_time = float(data['osrm_time'])
-    except Exception as e:
-        print(e)
-        
+        raw_osrm_distance = float(data['osrm_distance'])
 
-    print(f"\n--- PREDICTING ETA: Hub {int(source_hub_raw)} -> Hub {int(dest_hub_raw)} ---")
-    
-    if source_hub_raw not in node_mapping or dest_hub_raw not in node_mapping:
-        print("ERROR: One of these hubs is brand new and wasn't in the training data!")
+    except Exception as e:
+        print(f"\n[❌ GNN ERROR] Data Extraction Failed: {e}")
+        print(f"Payload received from engine: {data}")
         return None
 
-    src_idx = node_mapping[source_hub_raw]
-    dst_idx = node_mapping[dest_hub_raw]
+    # 2. Fuzzy dictionary lookup helper to bypass int/float/string mismatches
+    def get_mapped_idx(hub_val):
+        if hub_val in node_mapping: return node_mapping[hub_val]
+        try:
+            if float(hub_val) in node_mapping: return node_mapping[float(hub_val)]
+            if int(hub_val) in node_mapping: return node_mapping[int(hub_val)]
+        except: pass
+        if str(hub_val) in node_mapping: return node_mapping[str(hub_val)]
+        return None
+
+    # 3. Safely map the nodes
+    src_idx = get_mapped_idx(source_hub_raw)
+    dst_idx = get_mapped_idx(dest_hub_raw)
     
+    if src_idx is None or dst_idx is None:
+        print(f"\n[❌ GNN ERROR] Unmapped Hubs! Src: {source_hub_raw} (Mapped: {src_idx}), Dest: {dest_hub_raw} (Mapped: {dst_idx})")
+        return None
+
+    # 4. AI Inference
     x_src = global_context_embeddings[src_idx].unsqueeze(0)
     x_dst = global_context_embeddings[dst_idx].unsqueeze(0)
     
-    dummy_input = np.array([[raw_osrm_time, 0.0, 0.0]])
+    # 4 columns to perfectly match your fitted scaler!
+    dummy_input = np.array([[raw_osrm_time, raw_osrm_distance, 0.0, 0.0]])
     scaled_values = scaler.transform(dummy_input)[0]
     
     edge_attr = torch.tensor([[is_carting, is_ftl, start_hour, scaled_values[0], scaled_values[1]]], dtype=torch.float32)
@@ -107,12 +133,8 @@ def predict_from_string(data):
     predicted_factor = min(predicted_factor, 4.0)
     true_eta = raw_osrm_time * predicted_factor
     
-    print(f"OSRM Base Time:       {raw_osrm_time:.2f} hours")
-    print(f"AI Predicted Factor:  {predicted_factor:.2f}x")
-    print(f"FINAL AI ETA:         {true_eta:.2f} hours")
-    print("-" * 50)
-    
     return true_eta
+
 
 if __name__ == "__main__":
     # while(1):

@@ -72,8 +72,9 @@ for index, row in df.iterrows():
     
     # We use 'weight' because NetworkX Dijkstra uses that keyword by default
     osrm_time = float(row['osrm_time'])
+    osrm_distance = float(row['osrm_distance'])
     
-    osrm_graph.add_edge(src, dst, weight=osrm_time)
+    osrm_graph.add_edge(src, dst, weight=osrm_time, osrm_distance=osrm_distance)
 
 print(f"Graph built with {osrm_graph.number_of_nodes()} nodes and {osrm_graph.number_of_edges()} edges.")
 
@@ -87,6 +88,8 @@ def getCandidatePaths(source_hub, destination_hub, k):
     except: pass
     print()
 
-# getCandidatePaths(0, 45, 4)
+getCandidatePaths(0, 45, 4)
 # getCandidatePaths(0, 1, 4)
 
+import joblib
+joblib.dump(osrm_graph, "./dataset/osrm_graph.pkl")
