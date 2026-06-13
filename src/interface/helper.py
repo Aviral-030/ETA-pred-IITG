@@ -4,13 +4,11 @@ import joblib
 from datetime import datetime
 import itertools
 import os
-
-# Import the PyTorch GNN function we built earlier!
 from runner import predict_eta
 
 class RoutingEngine:
     def __init__(self):
-        current_dir = os.path.dirname(os.path.abspath(__file__))        
+        current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.abspath(os.path.join(current_dir, "../.."))
 
         graph_path = os.path.join(project_root, 'dataset', 'osrm_graph.pkl')
@@ -29,16 +27,13 @@ class RoutingEngine:
 
     def _get_candidate_paths(self, src, dest, blacklisted_hubs, k=5):
         """Generates top K paths on a temporary graph that respects blacklists."""
-        # 1. Create a lightweight temporary view of the graph
         working_graph = self.osrm_graph.copy()
         
-        # 2. Safely remove blacklisted hubs from the temporary graph
         for hub_name in blacklisted_hubs:
             hub_id = self._get_hub_number(hub_name)
             if hub_id is not None and working_graph.has_node(hub_id):
                 working_graph.remove_node(hub_id)
 
-        # 3. Generate the paths
         try:
             paths_generator = nx.shortest_simple_paths(working_graph, src, dest, weight='weight')
             return list(itertools.islice(paths_generator, k))
@@ -57,17 +52,14 @@ class RoutingEngine:
             'osrm_distance': road_data['osrm_distance']
         }
 
-        # User explicitly requested FTL
         if user_ftl == 1:
             base_payload['is_ftl'] = 1; base_payload['is_carting'] = 0
             return predict_eta(base_payload)
             
-        # User explicitly requested Carting
         elif user_carting == 1:
             base_payload['is_ftl'] = 0; base_payload['is_carting'] = 1
             return predict_eta(base_payload)
             
-        # User requested "Auto" (Test both, pick the fastest)
         else:
             base_payload['is_ftl'] = 1; base_payload['is_carting'] = 0
             eta_ftl = predict_eta(base_payload)
@@ -77,7 +69,7 @@ class RoutingEngine:
             
             if eta_ftl is None or eta_carting is None:
                 print(f"WARNING: AI failed on leg {src} -> {dest}. Skipping.")
-                return float('inf') # Returning infinity ensures Dijkstra ignores this broken path
+                return float('inf')
             
             return min(eta_ftl, eta_carting)
 
@@ -93,14 +85,12 @@ class RoutingEngine:
         if src_id is None or dest_id is None:
             return {"error": "Invalid Source or Destination Name."}
 
-        # Handle Default Start Time
         if user_data['start_hour'] == -1:
             now = datetime.now()
             start_clock = now.hour + (now.minute / 60.0)
         else:
             start_clock = float(user_data['start_hour'])
 
-        # Get Candidates
         top_paths = self._get_candidate_paths(src_id, dest_id, user_data.get('blacklist_hubs', []))
         
         if not top_paths:
@@ -108,7 +98,7 @@ class RoutingEngine:
 
         best_path = None
         best_overall_eta = float('inf')
-        path_details = [] # Optional: send data back to Streamlit to draw comparison charts
+        path_details = []
 
         # Evaluate every path
         for path in top_paths:
@@ -125,7 +115,6 @@ class RoutingEngine:
                 )
                 
                 total_path_eta += leg_eta
-                # The Time Machine: Roll the clock forward
                 current_clock = (current_clock + leg_eta) % 24
                 
             path_details.append({"path": path, "total_eta": total_path_eta})
@@ -138,5 +127,5 @@ class RoutingEngine:
             "success": True,
             "best_path": best_path,
             "best_eta_hours": round(best_overall_eta, 2),
-            "all_evaluated_paths": path_details # Useful if Streamlit wants to show alternatives
+            "all_evaluated_paths": path_details
         }

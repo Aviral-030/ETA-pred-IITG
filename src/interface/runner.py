@@ -134,11 +134,3 @@ def predict_eta(data):
     true_eta = raw_osrm_time * predicted_factor
     
     return true_eta
-
-
-if __name__ == "__main__":
-    # while(1):
-    #     testing_str = input(">>>")
-    #     if(testing_str=="q"): break
-    #     predict_from_string(testing_str)
-    ...

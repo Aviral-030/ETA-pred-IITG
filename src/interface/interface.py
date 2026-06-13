@@ -16,7 +16,7 @@ id_to_name = engine.hub_info.set_index('hub_number')['hub_name'].to_dict()
 name_to_row = engine.hub_info.set_index('hub_name')
 
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/4305/4305315.png", width=80) # Placeholder truck icon
+    st.image("https://cdn-icons-png.flaticon.com/512/4305/4305315.png", width=80)
     st.title("Routing Parameters")
     st.markdown("---")
     
