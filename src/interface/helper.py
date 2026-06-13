@@ -114,7 +114,7 @@ class RoutingEngine:
                     user_data['is_ftl'], user_data['is_carting']
                 )
                 
-                total_path_eta += leg_eta
+                total_path_eta = leg_eta + total_path_eta
                 current_clock = (current_clock + leg_eta) % 24
                 
             path_details.append({"path": path, "total_eta": total_path_eta})
