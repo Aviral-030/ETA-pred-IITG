@@ -47,7 +47,6 @@ def risk_label(score):
     if score > 0.15: return "Medium"
     return "Low"
 
-# Analytics Section - Lifted Cards
 st.subheader("Hub Analytics")
 col1, col2 = st.columns(2)
 
