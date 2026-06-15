@@ -8,6 +8,3 @@ wheels/
 
 # Virtual environments
 .venv
-
-# dataset
-dataset/raw_data.csv
